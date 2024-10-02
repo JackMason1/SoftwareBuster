@@ -17,12 +17,8 @@
 ### Prerequisites
 
 - Python 3.x
-- Required libraries (will be installed during setup):
-  ```bash
-  pip3 install argparse selenium requests beautifulsoup4 colorama tabulate
-  ```
-
-- **GeckoDriver**: SoftwareBuster uses Selenium with Firefox. Download the latest version of [GeckoDriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.
+- This tool was designed to be run on a Mac
+- May need **GeckoDriver**: SoftwareBuster uses Selenium with Firefox. Download the latest version of [GeckoDriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.
 
 ### Setup
 
