@@ -28,6 +28,7 @@ SoftwareBuster includes a setup script (`setup`) to automate the installation of
 2. Run the setup script:
 
 ```bash
+cd SoftwareBuster
 chmod +x setup
 ./setup
 ```
