@@ -405,6 +405,7 @@ def findSoftware(IP_addresses, timeout, threads_value, delay):
 def print_markdown_outdated_table(results):
     snyk_links = set()
     nist_links = set()
+    
     # Header
     table = "| Host | Port | Software Discovered | Version Found | Latest Version | CVE |\n"
     table += "|------|------|---------------------|---------------|----------------|-----|\n"
@@ -418,36 +419,40 @@ def print_markdown_outdated_table(results):
                 software_list = port_info.get('software', [])
                 if software_list:
                     for software in software_list:
-                        outdated = software.get('outdated', None)
-                        if outdated:  # Only include outdated software
-                            library = software.get('library', 'N/A')
-                            version_found = software.get('version', 'N/A')
-                            latest_version = software.get('latest_version', 'N/A')
-                            cve_list = software.get('cve', [])
-                            cve_str = ", ".join([cve['cve'] for cve in cve_list]) if cve_list else 'N/A'
+                        library = software.get('library', 'N/A')
+                        version_found = software.get('version', 'N/A')
+                        latest_version = software.get('latest_version', 'N/A')
+                        cve_list = software.get('cve', [])
+                        cve_str = ", ".join([cve['cve'] for cve in cve_list]) if cve_list else 'N/A'
 
-                            # Collect links
-                            for cve_info in cve_list:
-                                snyk_link = cve_info.get('snyk_link')
-                                nist_link = cve_info.get('nist_link')
-                                if snyk_link:
-                                    snyk_links.add(snyk_link)
-                                if nist_link:
-                                    nist_links.add(nist_link)
-                            table += f"| {host} | {port} | {library} | {version_found} | {latest_version} | {cve_str} |\n"
+                        # Collect all Snyk links, even if no CVE is found
+                        snyk_link = f"https://security.snyk.io/package/npm/{software.get('officialName', library)}/{version_found}"
+                        snyk_links.add(snyk_link)
+
+                        # Collect links to NIST if CVEs are found
+                        for cve_info in cve_list:
+                            nist_link = cve_info.get('nist_link')
+                            if nist_link:
+                                nist_links.add(nist_link)
+
+                        table += f"| {host} | {port} | {library} | {version_found} | {latest_version} | {cve_str} |\n"
 
     if table.strip() == "| Host | Port | Software Discovered | Version Found | Latest Version | CVE |\n|------|------|---------------------|---------------|----------------|-----|\n":
-        print("No outdated software found.")
+        print("No software found.")
     else:
-        # Print Links used section
+        # Ensure all links are displayed in "Links used"
         print("\nLinks used:")
-        for link in snyk_links:
-            print(f"- Snyk: {link}")
-        for link in nist_links:
-            print(f"- NIST: {link}")
+        if snyk_links or nist_links:
+            for link in snyk_links:
+                print(f"- Snyk: {link}")
+            for link in nist_links:
+                print(f"- NIST: {link}")
+        else:
+            print("No CVE links found for any software.")
 
-        print("\nMarkdown Table of Outdated Software:\n")
+        print("\nMarkdown Table of Software:\n")
         print(table)
+
 
 
 def print_colored_table(results):
