@@ -1,0 +1,587 @@
+#!/usr/bin/env python3
+
+import argparse
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.common.exceptions import TimeoutException
+import requests
+import re
+import socket
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from requests.exceptions import HTTPError, Timeout
+import traceback
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+import time
+import os
+
+# For colored output
+from colorama import init, Fore, Style
+from tabulate import tabulate  # For table formatting
+
+# Initialize colorama
+init(autoreset=True)
+
+session = requests.Session()
+
+cookies_option = True
+screenshots_options = False
+delay_value = 100
+
+# Create a global lock for Snyk requests
+snyk_lock = threading.Lock()
+
+def resolve_domain(domain_name):
+    hasWWW = domain_name.startswith('www.')
+    
+    try:
+        # Resolve the domain to an IP address
+        ip_address = socket.gethostbyname(domain_name)
+        print(f'\n{domain_name} successfully resolved to {ip_address}\n')
+        return [ip_address, domain_name]
+    except:
+        print(f'\nThe domain {domain_name} did not resolve on the first attempt.\n')
+        if hasWWW:
+            domain_name = re.sub(r'^www\.', '', domain_name)
+        else:
+            domain_name = 'www.' + domain_name
+        try:
+            ip_address = socket.gethostbyname(domain_name)
+            print(f'\n{domain_name} successfully resolved to {ip_address}\n')
+            return [ip_address, domain_name]
+        except Exception as e:
+            print(f"\nError in resolving the domain: {domain_name}\n {e}\n")
+            return False
+
+def sanitise_url(url):
+    """Sanitise the given URL."""
+    url = re.sub(r'^https?://', '', url)  # Remove http:// or https://
+    port_input = url.split(":")
+    if len(port_input) > 1:
+        port_input_combined = ':'
+        for character in port_input[1]:
+            if character.isnumeric():
+                port_input_combined += character
+            elif character == ',':
+                port_input_combined += character
+            else:
+                break
+        port_input = port_input_combined
+    else:
+        port_input = ""
+
+    url = url.replace(port_input, "")
+
+    extension_parts = url.split("/")
+    if len(extension_parts) > 1 and extension_parts[1]:
+        extension = "/" + "/".join(extension_parts[1:])
+    else:
+        extension = ""
+
+    url = extension_parts[0] + port_input  # Combine domain with port if any
+    url = url.split("#")[0]
+    url = url.split("?")[0]
+
+    return [url, extension]
+
+def process_text_input(input_field, IP_addresses):
+    for address in input_field:
+        address = address.strip()
+
+        split_address = sanitise_url(address)
+        sanitised_address = split_address[0]
+        extension = split_address[1]
+
+        domain_part = sanitised_address.split(":")[0] if ":" in sanitised_address else sanitised_address
+        port_parts = sanitised_address.split(":")[1].split(",") if ":" in sanitised_address else []
+        resolved_ip_and_domain = resolve_domain(domain_part)
+
+        if resolved_ip_and_domain:
+            urlIP, resolved_domain = resolved_ip_and_domain
+            resolved_domain_with_extension = resolved_domain + extension
+            ip_found = False
+
+            for ip in IP_addresses:
+                if urlIP in ip["host"] or resolved_domain_with_extension in ip["host"]:
+                    # Merge ports if the IP or domain is already present
+                    existing_ports = ip["ports"]
+                    # Convert port_parts to dicts with 'port' and 'service'
+                    new_ports = [{'port': port, 'service': 'https' if port in ['443', '8443'] else 'http'} for port in port_parts]
+                    # Avoid duplicates
+                    existing_port_numbers = [p['port'] for p in existing_ports]
+                    for new_port in new_ports:
+                        if new_port['port'] not in existing_port_numbers:
+                            existing_ports.append(new_port)
+                    if resolved_domain_with_extension not in ip["host"]:
+                        ip["host"].append(resolved_domain_with_extension)
+                    ip_found = True
+                    break
+
+            if not ip_found:
+                # If there's no matching IP, add a new entry
+                new_entry_ports = port_parts if port_parts else ['443']  # Default port is '443'
+                # Convert ports to dicts with 'port' and 'service'
+                new_entry_ports = [{'port': port, 'service': 'https' if port in ['443', '8443'] else 'http'} for port in new_entry_ports]
+                IP_addresses.append({'host': [resolved_domain_with_extension], 'ports': new_entry_ports})
+
+    return IP_addresses
+
+def get_latest_version(package_name):
+    """
+    Get the latest version of a given npm package using a persistent session.
+    """
+    npm_registry_url = f'https://registry.npmjs.org/{package_name}'
+    
+    try:
+        response = session.get(npm_registry_url, timeout=(5, 14))
+        response.raise_for_status()  # This will raise an exception for HTTP errors
+        data = response.json()
+        return data['dist-tags']['latest']
+    except (HTTPError, Timeout) as http_err:
+        print(f"HTTP error occurred: {http_err}")
+    except Exception as err:
+        print(f"An error occurred: {err}")
+    return None
+
+def findCVE(package_name, package_version, num_cves=2):
+    """
+    Find CVEs for a given npm package and version.
+    This function uses a global lock to ensure that only one thread
+    queries Snyk at a time and includes a 1-second delay between requests.
+    """
+    snyk_url = f'https://security.snyk.io/package/npm/{package_name}/{package_version}'
+    base_url = "https://security.snyk.io"
+
+    cve_list = []
+
+    # Acquire the global lock before querying Snyk
+    with snyk_lock:
+        try:
+            time.sleep(1)  # Delay before making the request
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0'
+            }
+            response = requests.get(snyk_url, headers=headers, timeout=(5, 14))
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            a_elements = soup.find_all('a', attrs={"data-snyk-test": "vuln table title", "class": "vue--anchor"})
+
+            for a_element in a_elements[:num_cves]:
+                href = a_element.get('href')
+                if href:
+                    vuln_url = urljoin(base_url, href)
+                    time.sleep(1)  # Delay before the next request
+                    vuln_response = requests.get(vuln_url, timeout=(5, 14))
+                    vuln_response.raise_for_status()
+
+                    vuln_soup = BeautifulSoup(vuln_response.text, 'html.parser')
+
+                    # Extract severity score
+                    severity_score = vuln_soup.find('div', attrs={"data-snyk-test": "severity widget score"})
+                    score = severity_score['data-snyk-test-score'] if severity_score and 'data-snyk-test-score' in severity_score.attrs else "Unknown"
+
+                    # Extract CVE number from the title
+                    title_tag = vuln_soup.find('title')
+                    if title_tag:
+                        cve_match = re.search(r'CVE-\d{4}-\d{4,7}', title_tag.get_text())
+                        if cve_match:
+                            cve = cve_match.group()
+                            nist_link = f'https://nvd.nist.gov/vuln/detail/{cve}'
+                        else:
+                            # Use the vulnerability URL if CVE is not found
+                            cve = vuln_url
+                            nist_link = None
+                    else:
+                        cve = vuln_url
+                        nist_link = None
+
+                    # Extract severity level
+                    severity_level = vuln_soup.find('span', class_="vue--badge__text")
+                    severity = severity_level.get_text(strip=True) if severity_level else "Unknown"
+
+                    # Store the CVE information with the modified snyk_link
+                    cve_list.append({
+                        "cve": cve,
+                        "score": score,
+                        "level": severity,
+                        "snyk_link": snyk_url,  # Now pointing to the original package URL
+                        "nist_link": nist_link
+                    })
+
+            return cve_list
+
+        except requests.exceptions.RequestException as req_err:
+            print(f"HTTP error occurred: {req_err}")
+        except Exception as err:
+            print(f"An error occurred: {err}")
+        # No need to release the lock explicitly; it's handled by 'with' statement
+
+
+
+def is_valid_version(version_str):
+    # This function checks if a string contains only numbers and dots
+    return re.match(r'^\d+(\.\d+)*$', version_str) is not None
+
+
+def add_cookie_to_driver(driver, cookie_str, url):
+    """
+    Parse the cookie string in 'name=value' format and add it to the WebDriver session.
+    The domain of the cookie is set to match the domain of the URL being processed.
+    """
+    cookie_parts = cookie_str.split('=')
+    if len(cookie_parts) != 2:
+        print(f"Invalid cookie format: {cookie_str}")
+        return
+    
+    cookie_name = cookie_parts[0].strip()
+    cookie_value = cookie_parts[1].strip()
+
+    # Extract the domain from the URL
+    parsed_url = urlparse(url)
+    domain = parsed_url.hostname
+
+    # Add the cookie to the Selenium WebDriver session
+    cookie_dict = {
+        'name': cookie_name,
+        'value': cookie_value,
+        'domain': domain,  # Ensure this matches the domain of the website you are visiting
+        'path': '/',  # Path is optional, defaults to '/'
+    }
+
+    print(f"Adding cookie: {cookie_dict}")
+    driver.add_cookie(cookie_dict)
+
+def get_software(address, file):
+    for target_host in address['host']:
+        for target_port in address['ports']:
+            found_software = []
+            try:
+                results = []
+                extension_parts = target_host.split('/')
+                extension = ''
+                if len(extension_parts) > 1:
+                    extension = "/" + "/".join(extension_parts[1:])
+
+                strippedHost = extension_parts[0]
+                service = target_port['service']
+                port_number = target_port['port']
+                url = f"{service}://{strippedHost}:{port_number}{extension}"
+
+                options = Options()
+                options.set_preference("devtools.toolbox.selectedTool", "console")
+                options.set_preference("devtools.toolbox.footer.height", 300)
+                #options.set_preference('permissions.default.image', 2)  # Disable images
+                options.set_preference('dom.ipc.plugins.enabled.libflashplayer.so', 'false')
+                options.set_preference('dom.webnotifications.enabled', False)
+                options.set_preference('media.volume_scale', '0.0')  # Disable sounds
+                options.set_preference('plugin.scan.plid.all', False)
+                options.set_preference('browser.cache.disk.enable', True)
+                options.set_preference('browser.cache.memory.enable', True)
+                options.set_preference('permissions.default.stylesheet', 2)
+                options.add_argument("-headless")
+
+                # Disable Extension Installs
+                options.set_preference("xpinstall.signatures.required", False)
+                options.set_preference("extensions.autoDisableScopes", 15)
+
+                # Disable Plugin Installs
+                options.set_preference("plugin.scan.plid.all", False)
+                options.set_preference("plugin.scan.Acrobat", "99.0")
+                options.set_preference("plugin.scan.Quicktime", "99.0")
+                options.set_preference("plugin.scan.WindowsMediaPlayer", "99.0")
+
+                options.add_argument("--window-size=1920x500")
+                
+                driver = webdriver.Firefox(options=options)
+                driver.implicitly_wait(5)
+                driver.set_page_load_timeout(timeout_value+5)
+
+                # Add cookie to the browser if provided
+                if cookie_value:
+                    add_cookie_to_driver(driver, cookie_value, url)
+
+                driver.get(url)
+
+                for item in file:
+                    temp = item.split(":")
+                    if len(temp) < 3:
+                        continue  # Skip invalid lines
+                    Library = temp[0]
+                    Discover = str(temp[1]).split('/')
+                    for discover in Discover:
+                        time.sleep(delay_value / 1000)  # Adding a delay if required
+                        try:
+                            version = driver.execute_script(f"return {discover.strip()}")
+                            if version:
+                                officialName = temp[2].strip()
+
+                                # Additional checks for Lodash and Underscore.js
+                                if Library in ['Lodash', 'Underscore.js']:
+                                    isLodash = driver.execute_script("return typeof _.curry === 'function'")
+                                    isUnderscore = driver.execute_script("return typeof _.mapObject === 'function'")
+
+                                    if isLodash and not isUnderscore:
+                                        actual_library = 'Lodash'
+                                        officialName = 'lodash'
+                                    elif isUnderscore and not isLodash:
+                                        actual_library = 'Underscore.js'
+                                        officialName = 'underscore'
+                                    else:
+                                        continue
+                                else:
+                                    actual_library = Library
+
+                                if actual_library in found_software:
+                                    continue  # Skip if already found
+
+                                versionNew = get_latest_version(officialName)
+
+                                if is_valid_version(version) and is_valid_version(versionNew):
+                                    outdated = version != versionNew
+                                else:
+                                    outdated = None
+
+                                cve = findCVE(officialName, version)
+
+                                found_software.append(actual_library)
+
+                                print(f"Found the Software {actual_library} on {url}")
+
+                                results.append({
+                                    "library": actual_library,
+                                    "version": version,
+                                    "latest_version": versionNew,
+                                    "discover": discover.strip(),  # Add discovery method here
+                                    "outdated": outdated,
+                                    "officialName": officialName,
+                                    "cve": cve
+                                })
+                        except Exception as e:
+                            pass
+
+                if cookies_option:
+                    cookies = driver.get_cookies()
+                    if cookies:
+                        target_port["cookies"] = cookies
+
+                driver.close()
+                driver.quit()
+                if results:
+                    if 'software' not in target_port:
+                        target_port["software"] = results
+                    else:
+                        target_port["software"].extend(results)
+            except TimeoutException:
+                print(f"Error: Navigation to {url} timed out after {timeout_value + 5} ms for host {target_host} on port {target_port['port']}.")
+            except Exception as e:
+                print(f"Error processing port {target_port} for host {target_host}: {e}")
+                traceback.print_exc()
+                try:
+                    driver.quit()
+                except Exception as quit_err:
+                    print("Driver Error:", quit_err)
+
+    return address
+
+
+def findSoftware(IP_addresses, timeout, threads_value, delay):
+    global cookies_option, screenshots_options, timeout_value, delay_value
+    timeout_value = timeout
+    delay_value = delay
+
+    with open("javascriptLibraries.txt", "r") as f:
+        file = f.read().split("\n")
+
+    def process_address(address):
+        return get_software(address, file)
+
+    with ThreadPoolExecutor(max_workers=threads_value) as executor:
+        results = executor.map(process_address, IP_addresses)
+    
+    return list(results)
+
+def print_markdown_outdated_table(results):
+    snyk_links = set()
+    nist_links = set()
+    # Header
+    table = "| Host | Port | Software Discovered | Version Found | Latest Version | CVE |\n"
+    table += "|------|------|---------------------|---------------|----------------|-----|\n"
+
+    for result in results:
+        hosts = result.get('host', [])
+        ports = result.get('ports', [])
+        for host in hosts:
+            for port_info in ports:
+                port = port_info.get('port', 'N/A')
+                software_list = port_info.get('software', [])
+                if software_list:
+                    for software in software_list:
+                        outdated = software.get('outdated', None)
+                        if outdated:  # Only include outdated software
+                            library = software.get('library', 'N/A')
+                            version_found = software.get('version', 'N/A')
+                            latest_version = software.get('latest_version', 'N/A')
+                            cve_list = software.get('cve', [])
+                            cve_str = ", ".join([cve['cve'] for cve in cve_list]) if cve_list else 'N/A'
+
+                            # Collect links
+                            for cve_info in cve_list:
+                                snyk_link = cve_info.get('snyk_link')
+                                nist_link = cve_info.get('nist_link')
+                                if snyk_link:
+                                    snyk_links.add(snyk_link)
+                                if nist_link:
+                                    nist_links.add(nist_link)
+                            table += f"| {host} | {port} | {library} | {version_found} | {latest_version} | {cve_str} |\n"
+
+    if table.strip() == "| Host | Port | Software Discovered | Version Found | Latest Version | CVE |\n|------|------|---------------------|---------------|----------------|-----|\n":
+        print("No outdated software found.")
+    else:
+        # Print Links used section
+        print("\nLinks used:")
+        for link in snyk_links:
+            print(f"- Snyk: {link}")
+        for link in nist_links:
+            print(f"- NIST: {link}")
+
+        print("\nMarkdown Table of Outdated Software:\n")
+        print(table)
+
+
+def print_colored_table(results):
+    headers = ["Host", "Port", "Software Discovered", "Version Found", "Latest Version", "CVE", "Discovery Method"]
+    table_rows = []
+
+    for result in results:
+        hosts = result.get('host', [])
+        ports = result.get('ports', [])
+        for host in hosts:
+            for port_info in ports:
+                port = port_info.get('port', 'N/A')
+                software_list = port_info.get('software', [])
+                if software_list:
+                    for software in software_list:
+                        library = software.get('library', 'N/A')
+                        version_found = software.get('version', 'N/A')
+                        latest_version = software.get('latest_version', 'N/A')
+                        discover_method = software.get('discover', 'N/A')  # This is the discovery method
+                        cve_list = software.get('cve', [])
+                        
+                        # Apply colors only to the Version Found and Latest Version columns
+                        outdated = software.get('outdated', None)
+                        if outdated:
+                            version_color = Fore.RED
+                        elif outdated == False:
+                            version_color = Fore.GREEN
+                        else:
+                            version_color = Style.RESET_ALL  # No color if outdated is None
+
+                        version_found_colored = version_color + version_found + Style.RESET_ALL
+                        latest_version_colored = version_color + latest_version + Style.RESET_ALL
+
+                        # Color-code CVEs based on severity
+                        if cve_list:
+                            cve_colored_list = []
+                            for cve_info in cve_list:
+                                cve_code = cve_info.get('cve', 'N/A')
+                                severity_score = cve_info.get('score', 'Unknown')
+                                # Determine color based on severity score
+                                try:
+                                    score = float(severity_score)
+                                    if score == 0:
+                                        cve_color = Fore.BLUE
+                                    elif 0.1 <= score <= 3.9:
+                                        cve_color = Fore.GREEN
+                                    elif 4.0 <= score <= 6.9:
+                                        cve_color = Fore.YELLOW
+                                    elif 7.0 <= score <= 8.9:
+                                        cve_color = Fore.MAGENTA  # Using magenta for orange
+                                    elif 9.0 <= score <= 10.0:
+                                        cve_color = Fore.RED
+                                    else:
+                                        cve_color = Style.RESET_ALL
+                                except ValueError:
+                                    cve_color = Style.RESET_ALL  # Default color if score is not a number
+                                    score = 'Unknown'
+
+                                cve_entry = f"{cve_color}{cve_code} ({score}){Style.RESET_ALL}"
+                                cve_colored_list.append(cve_entry)
+                            cve_str = ", ".join(cve_colored_list)
+                        else:
+                            cve_str = 'N/A'
+
+                        # Add the discovery method (JavaScript code used) to the table row
+                        row = [host, port, library, version_found_colored, latest_version_colored, cve_str, discover_method]
+                        table_rows.append(row)
+                else:
+                    # No software found for this host and port
+                    row = [host, port, 'N/A', 'N/A', 'N/A', 'N/A', 'N/A']
+                    table_rows.append(row)
+
+    print("\nAll Software Discovered:\n")
+    print(tabulate(table_rows, headers=headers, tablefmt="github", stralign="left"))
+
+
+
+titleArt = '''
+
+ _____        __ _                           ______           _            
+/  ___|      / _| |                          | ___ \         | |           
+\ `--.  ___ | |_| |___      ____ _ _ __ ___  | |_/ /_   _ ___| |_ ___ _ __ 
+ `--. \/ _ \|  _| __\ \ /\ / / _` | '__/ _ \ | ___ \ | | / __| __/ _ \ '__|
+/\__/ / (_) | | | |_ \ V  V / (_| | | |  __/ | |_/ / |_| \__ \ ||  __/ |   
+\____/ \___/|_|  \__| \_/\_/ \__,_|_|  \___| \____/ \__,_|___/\__\___|_|   
+                                                                           
+                                                                           
+- By Jack Mason
+'''
+
+if __name__ == "__main__":
+    # Command-line interface
+    print (titleArt)
+    parser = argparse.ArgumentParser(description='Scan URLs for outdated JavaScript libraries.')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--url', help='The URL to scan.')
+    group.add_argument('--file', help='File containing a list of URLs to scan.')
+    parser.add_argument('--timeout', type=int, default=10, help='Timeout value in seconds.')
+    parser.add_argument('--threads', type=int, default=4, help='Number of threads to use.')
+    parser.add_argument('--delay', type=int, default=100, help='Delay value in milliseconds.')
+    parser.add_argument('--cookie', help='Add a session cookie')
+
+    args = parser.parse_args()
+
+    timeout_value = args.timeout
+    threads_value = args.threads
+    delay_value = args.delay
+    cookie_value = args.cookie
+
+    IP_addresses = []
+
+    if args.url:
+        input_urls = [args.url]
+    elif args.file:
+        # Read URLs from file
+        if os.path.isfile(args.file):
+            with open(args.file, 'r') as f:
+                input_urls = [line.strip() for line in f if line.strip()]
+        else:
+            print(f"File {args.file} does not exist.")
+            exit(1)
+    else:
+        input_urls = []
+
+    if not input_urls:
+        print("No URLs provided to scan.")
+        exit(1)
+
+    IP_addresses = process_text_input(input_urls, IP_addresses)
+    results = findSoftware(IP_addresses, timeout_value, threads_value, delay_value)
+
+    # Print markdown table of outdated software
+    print_markdown_outdated_table(results)
+
+    # Print pretty table with colors
+    print_colored_table(results)
+    print('\n')
