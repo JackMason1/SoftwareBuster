@@ -26,14 +26,14 @@
 
 ### Setup
 
-SoftwareBuster includes a setup script (`setup.sh`) to automate the installation of dependencies and configuration. 
+SoftwareBuster includes a setup script (`setup`) to automate the installation of dependencies and configuration. 
 
 1. Clone the repository or download the script.
 2. Run the setup script:
 
 ```bash
-chmod +x setup.sh
-./setup.sh
+chmod +x setup
+./setup
 ```
 
 This script will:
@@ -123,4 +123,4 @@ pip3 uninstall -r requirements.txt
 
 ---
 
-This README explains the basic usage and setup of SoftwareBuster. For more detailed information on how the tool works, refer to the comments in the source code.
+This README explains the basic usage and up of SoftwareBuster. For more detailed information on how the tool works, refer to the comments in the source code.
