@@ -7,8 +7,5 @@ pip3 install -r requirements.txt
 cp SoftwareBuster /usr/local/bin/
 chmod +x /usr/local/bin/SoftwareBuster
 
-pip3 install --upgrade pip
-pip3 install -r requirements.txt
-
 echo "Software Buster has been moved to /usr/local/bin/"
 echo "To run the script please use: python3 SoftwareBuster file.txt"
