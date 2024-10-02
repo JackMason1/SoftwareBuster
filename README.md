@@ -61,7 +61,7 @@ After installation, you can run SoftwareBuster directly from the terminal.
 ### Syntax
 
 ```bash
-python3 SoftwareBuster [OPTIONS]
+SoftwareBuster [OPTIONS]
 ```
 
 ### Options
@@ -77,17 +77,17 @@ python3 SoftwareBuster [OPTIONS]
 
 1. **Scan a Single URL**:
    ```bash
-   python3 SoftwareBuster --url https://example.com
+   SoftwareBuster --url https://example.com
    ```
 
 2. **Scan Multiple URLs from a File**:
    ```bash
-   python3 SoftwareBuster --file urls.txt
+   SoftwareBuster --file urls.txt
    ```
 
 3. **Scan with Session Cookie**:
    ```bash
-   python3 SoftwareBuster --url https://example.com --cookie "sessionid=abcd1234"
+   SoftwareBuster --url https://example.com --cookie "sessionid=abcd1234"
    ```
 
 ## Output
