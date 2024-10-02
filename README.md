@@ -17,7 +17,7 @@
 ### Prerequisites
 
 - Python 3.x
-- This tool was designed to be run on a Mac
+- This tool was designed to be run on a **Mac**
 - May need **GeckoDriver**: SoftwareBuster uses Selenium with Firefox. Download the latest version of [GeckoDriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.
 
 ### Setup
