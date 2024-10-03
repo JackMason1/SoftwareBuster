@@ -18,6 +18,7 @@
 
 - Python 3.x
 - This tool was designed to be run on a **Mac**
+- [HomeBrew](https://brew.sh/) needs to be installed 
 - May need **GeckoDriver**: SoftwareBuster uses Selenium with Firefox. Download the latest version of [GeckoDriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.
 
 ### Setup
