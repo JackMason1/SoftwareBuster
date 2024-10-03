@@ -48,6 +48,7 @@ pip3 install -r requirements.txt
 
 # Move SoftwareBuster to /usr/local/bin and make it executable
 cp SoftwareBuster /usr/local/bin/
+cp javascriptLibraries.txt /usr/local/bin/
 chmod +x /usr/local/bin/SoftwareBuster
 ```
 
@@ -111,6 +112,7 @@ To remove SoftwareBuster from your system, run the following commands:
 
 ```bash
 rm /usr/local/bin/SoftwareBuster
+rm /usr/local/bin/javascriptLibraries.txt
 pip3 uninstall -r requirements.txt
 ```
 
