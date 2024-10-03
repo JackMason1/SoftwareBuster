@@ -5,6 +5,7 @@ pip3 install -r requirements.txt
 
 # Move NetScan to ~/bin and make it executable
 cp SoftwareBuster /usr/local/bin/
+cp javascriptLibraries.txt /usr/local/bin/
 chmod +x /usr/local/bin/SoftwareBuster
 
 echo "Software Buster has been moved to /usr/local/bin/"
