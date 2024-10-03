@@ -412,7 +412,7 @@ def add_cookie_to_driver(driver, cookie_str, url):
         'path': '/',  # Path is optional, defaults to '/'
     }
 
-    print(f"Adding cookie: {cookie_dict}")
+    print(f"Adding cookie: {cookie_dict}\n")
     driver.get(url)
     driver.add_cookie(cookie_dict)
 
