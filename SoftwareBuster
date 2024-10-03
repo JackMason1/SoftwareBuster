@@ -612,7 +612,7 @@ def print_markdown_outdated_table(results):
         else:
             print("No CVE links found for any software.")
 
-        print("\nMarkdown Table of Software:\n")
+        print("\nMarkdown Table of Outdated Software:\n")
         print(table)
 
 
