@@ -26,7 +26,7 @@ SoftwareBuster includes a setup script (`setup`) to automate the installation of
 
 1. Clone the repository or download the script.
 ```bash
-git clone https://github.com/JackMason1/SoftwareBuster
+git clone https://github.com/JackMason1/SoftwareBuster.git
 ```
 3. Run the setup script:
 
