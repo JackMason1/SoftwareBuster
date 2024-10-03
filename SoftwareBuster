@@ -251,6 +251,7 @@ def add_cookie_to_driver(driver, cookie_str, url):
     }
 
     print(f"Adding cookie: {cookie_dict}")
+    driver.get(url)
     driver.add_cookie(cookie_dict)
 
 def get_software(address, file):
