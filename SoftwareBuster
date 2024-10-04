@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import time
 import os
+import random
 
 # For colored output
 from colorama import init, Fore, Style
@@ -193,7 +194,6 @@ Yup: Yup.version: yup
 zone.js: zone.VERSION: zone.js"""
 
 
-
 def resolve_domain(domain_name):
     hasWWW = domain_name.startswith('www.')
     
@@ -320,7 +320,7 @@ def findCVE(package_name, package_version, num_cves=2):
     # Acquire the global lock before querying Snyk
     with snyk_lock:
         try:
-            time.sleep(1)  # Delay before making the request
+            time.sleep(random.uniform(1, 2))  # Delay before making the request
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0'
             }
@@ -334,7 +334,7 @@ def findCVE(package_name, package_version, num_cves=2):
                 href = a_element.get('href')
                 if href:
                     vuln_url = urljoin(base_url, href)
-                    time.sleep(1)  # Delay before the next request
+                    time.sleep(random.uniform(1, 2))  # Delay before the next request
                     vuln_response = requests.get(vuln_url, timeout=(5, 14))
                     vuln_response.raise_for_status()
 
@@ -412,7 +412,7 @@ def add_cookie_to_driver(driver, cookie_str, url):
         'path': '/',  # Path is optional, defaults to '/'
     }
 
-    print(f"Adding cookie: {cookie_dict}\n")
+    print(f"Adding cookie: {cookie_dict}")
     driver.get(url)
     driver.add_cookie(cookie_dict)
 
@@ -612,7 +612,7 @@ def print_markdown_outdated_table(results):
         else:
             print("No CVE links found for any software.")
 
-        print("\nMarkdown Table of Outdated Software:\n")
+        print("\nMarkdown Table of Software:\n")
         print(table)
 
 
