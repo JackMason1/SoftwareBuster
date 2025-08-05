@@ -33,7 +33,7 @@ git clone https://github.com/JackMason1/SoftwareBuster.git
 
 ```bash
 cd SoftwareBuster
-./setup.sh
+sudo ./setup.sh
 ```
 
 This script will:
