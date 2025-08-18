@@ -66,6 +66,12 @@ After installation, you can run SoftwareBuster directly from the terminal.
 SoftwareBuster [OPTIONS]
 ```
 
+Or
+
+```bash
+SB [OPTIONS]
+```
+
 ### Options
 
 - `--url` `<URL>`: Scan a single URL.
