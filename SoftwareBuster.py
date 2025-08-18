@@ -231,7 +231,7 @@ def add_cookie_to_driver(driver, cookie_str, url):
     driver.get(url)
     driver.add_cookie(cookie_dict)
 
-def get_software(address, file):
+def get_software(address, file, show_browser):
     for target_host in address['host']:
         for target_port in address['ports']:
             found_software = set()
@@ -239,10 +239,15 @@ def get_software(address, file):
             try:
                 service = target_port['service']
                 port_number = target_port['port']
-                url = f"{service}://{target_host}:{port_number}"
+                # Build a proper URL that preserves any path included in target_host
+                parsed_target = urlparse(f"//{target_host}")
+                domain_only = parsed_target.hostname or target_host
+                path_only = parsed_target.path if parsed_target.path else "/"
+                url = f"{service}://{domain_only}:{port_number}{path_only}"
 
                 options = Options()
-                options.add_argument("-headless")
+                if not show_browser:
+                    options.add_argument("-headless")
                 options.add_argument("--window-size=1920x500")
                 # Add other options as needed
 
@@ -305,7 +310,7 @@ def get_software(address, file):
     return address
 
 
-def findSoftware(IP_addresses, timeout, threads_value, delay, javascript_libraries, num_cves_value):
+def findSoftware(IP_addresses, timeout, threads_value, delay, javascript_libraries, num_cves_value, show_browser):
     global cookies_option, screenshots_options, timeout_value, delay_value
     timeout_value = timeout
     delay_value = delay
@@ -313,7 +318,7 @@ def findSoftware(IP_addresses, timeout, threads_value, delay, javascript_librari
     file = javascript_libraries.split("\n")
 
     def process_address(address):
-        return get_software(address, file)
+        return get_software(address, file, show_browser)
 
     with ThreadPoolExecutor(max_workers=threads_value) as executor:
         results = executor.map(process_address, IP_addresses)
@@ -353,7 +358,7 @@ def print_markdown_outdated_table(results):
     print(tabulate(table_data, headers=headers, tablefmt="github"))
 
     if snyk_links or nist_links:
-        print("\n\nLinks Used:")
+        print("Links Used:")
         for link in sorted(snyk_links):
             print(f"- Snyk: {link}")
         for link in sorted(nist_links):
@@ -421,7 +426,7 @@ def print_colored_table(results):
                         software.get('discover', 'N/A')
                     ])
 
-    print("\n\nAll Software Discoverd:")
+    print("All Software Discoverd")
     print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
 
@@ -455,6 +460,7 @@ if __name__ == "__main__":
     parser.add_argument('--delay', type=int, default=100, help='Delay value in milliseconds.')
     parser.add_argument('--cookie', help='Add a session cookie (e.g. "PHPSESSID=a8d127e..")')
     parser.add_argument('--num-cves', type=int, default=3, help='Number of CVEs to find for each vulnerability.')
+    parser.add_argument('--show', action='store_true', help='Show the browser.')
 
     args = parser.parse_args()
 
@@ -463,6 +469,7 @@ if __name__ == "__main__":
     delay_value = args.delay
     cookie_value = args.cookie
     num_cves_value = args.num_cves
+    show_browser = args.show
 
     IP_addresses = []
 
@@ -501,7 +508,7 @@ if __name__ == "__main__":
         print(f"{Fore.WHITE}Cookie: {args.cookie}")
 
     IP_addresses = process_text_input(input_urls, IP_addresses)
-    results = findSoftware(IP_addresses, timeout_value, threads_value, delay_value, javascript_libraries, num_cves_value)
+    results = findSoftware(IP_addresses, timeout_value, threads_value, delay_value, javascript_libraries, num_cves_value, show_browser)
 
     print_markdown_outdated_table(results)
 
