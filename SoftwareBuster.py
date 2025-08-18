@@ -358,7 +358,7 @@ def print_markdown_outdated_table(results):
     print(tabulate(table_data, headers=headers, tablefmt="github"))
 
     if snyk_links or nist_links:
-        print("Links Used:")
+        print("\nLinks Used:")
         for link in sorted(snyk_links):
             print(f"- Snyk: {link}")
         for link in sorted(nist_links):
@@ -426,7 +426,7 @@ def print_colored_table(results):
                         software.get('discover', 'N/A')
                     ])
 
-    print("All Software Discoverd")
+    print("\nAll Software Discoverd")
     print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
 
