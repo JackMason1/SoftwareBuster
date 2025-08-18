@@ -28,4 +28,7 @@ EOF
 # Make the script executable
 chmod +x /usr/local/bin/SoftwareBuster
 
-echo "Setup complete! You can now run 'SoftwareBuster' from anywhere."
+# Create the second executable script in /usr/local/bin
+ln -s /usr/local/bin/SoftwareBuster /usr/local/bin/SB
+
+echo "Setup complete! You can now run 'SoftwareBuster' or 'SB' from anywhere."
