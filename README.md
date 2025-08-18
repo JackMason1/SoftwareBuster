@@ -33,7 +33,7 @@ git clone https://github.com/JackMason1/SoftwareBuster.git
 
 ```bash
 cd SoftwareBuster
-sudo ./setup.sh
+./setup.sh
 ```
 
 This script will:
@@ -72,6 +72,7 @@ SoftwareBuster [OPTIONS]
 - `--threads` `<num_threads>`: Set the number of threads for concurrent scanning (default: 4).
 - `--delay` `<milliseconds>`: Set the delay between requests (default: 100 ms).
 - `--cookie` `<cookie_string>`: Add a session cookie (optional).
+- `--show`: Show the browser window (default: headless).
 
 ### Example Commands
 
