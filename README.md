@@ -4,6 +4,8 @@
 
 **SoftwareBuster** is a Python tool designed to scan websites for outdated JavaScript libraries. It resolves domain names, checks software versions, and identifies potential security vulnerabilities using Snyk's vulnerability database. The tool can process single URLs or a batch of URLs, providing detailed reports in markdown or color-coded formats.
 
+![SoftwareBuster](https://github.com/JackMason1/SoftwareBuster/blob/main/SoftwareBuster.png)
+
 ## Features
 
 - **Domain Resolution**: Resolves domains to their respective IP addresses.
